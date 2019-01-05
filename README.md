@@ -8,6 +8,34 @@ Create dictionary pairs variable value or question answer data structure.
           2. Transpose sort
           3. SQL only  (may nt be that slow in Terdata or Exadata)
 
+    Recent nice addition and the fastest by
+    Keintz, Mark
+    mkeintz@wharton.upenn.edu
+
+    data _null_;
+      if 0 then set have nobs=nrows;
+      array v {*} _numeric_;
+      call symput("nrows",cats(nrows));
+      call symput("ncols",cats(dim(v)));
+    run;
+
+    data want (keep=col val);
+      set have end=end_of_have;
+      array x {&nrows,&ncols} _temporary_;
+      array vals {*} _numeric_;
+      do _c=1 to &ncols;
+        x{_n_,_c}=vals{_c};
+     end;
+      if end_of_have;
+      do _c=1 to &ncols;
+        col=vname(vals{_c});
+        do _r=1 to &nrows;
+          val=x{_r,_c};
+          output;
+        end;
+      end;
+    run;
+
 
     github
     https://tinyurl.com/y74e4nol
