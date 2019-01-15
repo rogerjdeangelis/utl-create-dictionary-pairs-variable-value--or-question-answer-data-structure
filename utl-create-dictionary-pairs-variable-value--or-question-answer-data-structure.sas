@@ -5,36 +5,8 @@ Create dictionary pairs variable value or question answer data structure
       1. Datastep and sort by PGStat (best?)
       2. Transpose sort
       3. SQL only  (may nt be that slow in Terdata or Exadata)
-      
-Recent nice addition and the fastest by
-Keintz, Mark
-mkeintz@wharton.upenn.edu
-
-data _null_;
-  if 0 then set have nobs=nrows;
-  array v {*} _numeric_;
-  call symput("nrows",cats(nrows));
-  call symput("ncols",cats(dim(v)));
-run;
-
-data want (keep=col val);
-  set have end=end_of_have;
-  array x {&nrows,&ncols} _temporary_;
-  array vals {*} _numeric_;
-  do _c=1 to &ncols;
-    x{_n_,_c}=vals{_c};
- end;
-  if end_of_have;
-  do _c=1 to &ncols;
-    col=vname(vals{_c});
-    do _r=1 to &nrows;
-      val=x{_r,_c};
-      output;
-    end;
-  end;
-run;
-
-
+      4. Datastep array solution by Mark Keintz
+      5. Hash solution by Bartosz Jablonski
 
 github
 https://tinyurl.com/y74e4nol
@@ -105,47 +77,106 @@ EXAMPLE OUTPUT
 PROCEESS
 ========
 
-  1. Datastep and sort by PGStat (best?)
+1. Datastep and sort by PGStat (best?)
 
-     data want;
-        set have;
-        array _a a--i;
-        do _i = 1 to dim(_a);
-            col = vname(_a{_i});
-            val = _a{_i};
-            if not missing(val) then output;
-            end;
-        keep col val;
-     run;
+   data want;
+      set have;
+      array _a a--i;
+      do _i = 1 to dim(_a);
+          col = vname(_a{_i});
+          val = _a{_i};
+          if not missing(val) then output;
+          end;
+      keep col val;
+   run;
 
-     proc sort data=want;
-        by col;
-     run;
+   proc sort data=want;
+      by col;
+   run;
 
-  2. Transpose sort
+2. Transpose sort
 
-     proc transpose data=have out=havXpo(drop=a--i rename=(_name_=col col1=val));
-       by a b c d e f g h i;
-       var a b c d e f g h i;
-     run;quit;
+   proc transpose data=have out=havXpo(drop=a--i rename=(_name_=col col1=val));
+     by a b c d e f g h i;
+     var a b c d e f g h i;
+   run;quit;
 
-     proc sort data=havXpo out=want;
-       by col;
-     run;quit;
+   proc sort data=havXpo out=want;
+     by col;
+   run;quit;
 
-  3. SQL only
+3. SQL only
 
-     %array(cols,values=a b c d e f g h i);
-     proc sql;
-        create
-           table want as
-        %do_over(cols,phrase=%str(
-           select "?"  as col, ? as val from have),between=outer union corr
-        )
-     ;quit;
+   %array(cols,values=a b c d e f g h i);
+   proc sql;
+      create
+         table want as
+      %do_over(cols,phrase=%str(
+         select "?"  as col, ? as val from have),between=outer union corr
+      )
+   ;quit;
 
-OUTPUT
-======
- see above
 
+4. Datastep array solution by Mark Keintz
+
+    Recent nice addition and the fastest by
+    Keintz, Mark
+    mkeintz@wharton.upenn.edu
+
+    data _null_;
+      if 0 then set have nobs=nrows;
+      array v {*} _numeric_;
+      call symput("nrows",cats(nrows));
+      call symput("ncols",cats(dim(v)));
+    run;
+
+    data want (keep=col val);
+      set have end=end_of_have;
+      array x {&nrows,&ncols} _temporary_;
+      array vals {*} _numeric_;
+      do _c=1 to &ncols;
+        x{_n_,_c}=vals{_c};
+     end;
+      if end_of_have;
+      do _c=1 to &ncols;
+        col=vname(vals{_c});
+        do _r=1 to &nrows;
+          val=x{_r,_c};
+          output;
+        end;
+      end;
+    run;
+
+
+5. Hash solution by Bartosz Jablonski
+
+    /* the code */
+    data have;
+      input a b c d e f g h i;
+    cards4;
+    01 02 03 04 05 06 07 08 09 10
+    02 03 04 05 06 07 08 09 10 11
+    ;;;;
+    run;quit;
+
+    data _null_;
+      if _n_=1 then
+      do;
+        length col $ 32 val 8;
+        declare hash want(multidata:"y", ordered:"A");
+        want.defineKey("col");
+        want.defineData("col", "val");
+        want.defineDone();
+      end;
+
+      set have end=eof;
+
+      array _a a--i;
+      do _i = 1 to dim(_a);
+          col = vname(_a{_i});
+          val = _a{_i};
+          if not missing(val) then want.add();
+          end;
+      if eof then want.output(dataset:"want");
+    run;
 
